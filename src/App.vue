@@ -134,7 +134,8 @@ async function handleFontUpload(options: { file?: { file: File } }) {
         </div>
 
         <div v-if="pixels" class="w-full overflow-auto rounded-[10px] border border-slate-700/15 bg-white/80 p-3">
-          <div v-for="(row, y) in pixels" :key="y" class="flex">
+          <div v-for="(row, y) in pixels" :key="y" class="flex items-center">
+            <span class="w-10 shrink-0 text-right text-xs font-medium text-slate-500">{{ y + 1 }}</span>
             <div
               v-for="(p, x) in row"
               :key="x"
