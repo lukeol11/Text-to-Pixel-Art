@@ -3,10 +3,59 @@ import { onMounted, ref } from 'vue';
 import { fonts, renderPixels, type Font } from 'js-pixel-fonts';
 import convertFont from './font/converter';
 
+const MIN_ZOOM = 1;
+const MAX_ZOOM = 50;
+
+function useDragScroll() {
+  const el = ref<HTMLElement | null>(null);
+  let dragging = false;
+  let startX = 0;
+  let startY = 0;
+  let scrollLeft = 0;
+  let scrollTop = 0;
+
+  function onMouseDown(e: MouseEvent) {
+    if (!el.value) return;
+    dragging = true;
+    startX = e.pageX - el.value.offsetLeft;
+    startY = e.pageY - el.value.offsetTop;
+    scrollLeft = el.value.scrollLeft;
+    scrollTop = el.value.scrollTop;
+    el.value.style.cursor = 'grabbing';
+    el.value.style.userSelect = 'none';
+  }
+
+  function onMouseMove(e: MouseEvent) {
+    if (!dragging || !el.value) return;
+    e.preventDefault();
+    const x = e.pageX - el.value.offsetLeft;
+    const y = e.pageY - el.value.offsetTop;
+    el.value.scrollLeft = scrollLeft - (x - startX);
+    el.value.scrollTop = scrollTop - (y - startY);
+  }
+
+  function onMouseUp() {
+    dragging = false;
+    if (!el.value) return;
+    el.value.style.cursor = 'grab';
+    el.value.style.userSelect = '';
+  }
+
+  return { el, onMouseDown, onMouseMove, onMouseUp };
+}
+
+const { el: pixelStageEl, onMouseDown, onMouseMove, onMouseUp } = useDragScroll();
+
+function onWheelZoom(e: WheelEvent) {
+  e.preventDefault();
+  const delta = e.deltaY > 0 ? -1 : 1;
+  zoom.value = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, zoom.value + delta));
+}
+
 // reactive state
 const text = ref('Hello there!');
 const fontSize = ref<number | null>(24);
-const zoom = ref(18);
+const zoom = ref((MIN_ZOOM + MAX_ZOOM) / 2);
 const pixels = ref<ReturnType<typeof renderPixels> | null>(null);
 const activeFontUrl = ref<string | null>(null);
 const activeFontName = ref('Seven Plus');
@@ -123,19 +172,42 @@ async function handleFontUpload(options: { file?: { file: File } }) {
       >
         <div class="flex items-center justify-between gap-3">
           <h2 class="m-0 text-base font-semibold text-slate-800">Pixel Output</h2>
-          <span class="rounded-full border border-slate-700/15 bg-white/80 px-2.5 py-1 text-xs text-slate-600">
-            {{ pixels ? 'Ready' : 'Not Rendered' }}
-          </span>
         </div>
 
         <div class="rounded-[10px] border border-slate-700/15 bg-white/70 px-3 py-3">
-          <p class="mb-1 text-[0.8rem] font-bold text-slate-700">Zoom: {{ zoom }}px</p>
-          <n-slider v-model:value="zoom" :min="8" :max="36" :step="1" />
+          <p class="mb-1 text-[0.8rem] font-bold text-slate-700">Zoom: {{ zoom }}</p>
+          <n-slider v-model:value="zoom" :min="MIN_ZOOM" :max="MAX_ZOOM" :step="1" />
         </div>
 
-        <div v-if="pixels" class="w-full overflow-auto rounded-[10px] border border-slate-700/15 bg-white/80 p-3">
+        <div
+          v-if="pixels"
+          ref="pixelStageEl"
+          class="w-full max-h-96 cursor-grab select-none overflow-auto rounded-[10px] border border-slate-700/15 bg-white/80 p-3"
+          @mousedown="onMouseDown"
+          @mousemove="onMouseMove"
+          @mouseup="onMouseUp"
+          @mouseleave="onMouseUp"
+          @wheel.prevent="onWheelZoom"
+        >
+          <!-- top column counter -->
+          <div v-show="zoom >= 16" class="flex items-center">
+            <span class="w-10 shrink-0" />
+            <div
+              v-for="(_, x) in pixels[0]"
+              :key="x"
+              class="shrink-0 overflow-hidden text-center text-[0.6rem] font-medium text-slate-400"
+              :style="{ width: `${zoom}px` }"
+            >
+              {{ x + 1 }}
+            </div>
+            <span class="w-10 shrink-0" />
+          </div>
+
+          <!-- pixel rows with row counter on both sides -->
           <div v-for="(row, y) in pixels" :key="y" class="flex items-center">
-            <span class="w-10 shrink-0 text-right text-xs font-medium text-slate-500">{{ y + 1 }}</span>
+            <span v-show="zoom >= 16" class="w-10 shrink-0 text-right text-xs font-medium text-slate-500">{{
+              y + 1
+            }}</span>
             <div
               v-for="(p, x) in row"
               :key="x"
@@ -147,6 +219,23 @@ async function handleFontUpload(options: { file?: { file: File } }) {
                 borderColor: p ? 'gainsboro' : 'lightgray',
               }"
             />
+            <span v-show="zoom >= 16" class="w-10 shrink-0 pl-2 text-left text-xs font-medium text-slate-500">{{
+              y + 1
+            }}</span>
+          </div>
+
+          <!-- bottom column counter -->
+          <div v-show="zoom >= 16" class="flex items-center">
+            <span class="w-10 shrink-0" />
+            <div
+              v-for="(_, x) in pixels[0]"
+              :key="x"
+              class="shrink-0 overflow-hidden text-center text-[0.6rem] font-medium text-slate-400"
+              :style="{ width: `${zoom}px` }"
+            >
+              {{ x + 1 }}
+            </div>
+            <span class="w-10 shrink-0" />
           </div>
         </div>
 
