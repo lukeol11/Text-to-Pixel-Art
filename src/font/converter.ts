@@ -3,6 +3,7 @@ import type { Font, Glyph, Pixel } from 'js-pixel-fonts';
 type ConvertFontOptions = {
   chars?: string;
   fontSize?: number;
+  fontName?: string;
 };
 
 type GlyphBounds = {
@@ -95,16 +96,16 @@ function drawGlyph(
 }
 
 async function convertFont(fontUrl: string, options: ConvertFontOptions = {}): Promise<Font> {
-  const { chars = '', fontSize = 24 } = options;
-  const fontName = await loadFont(fontUrl);
+  const { chars = '', fontName = 'custom-font', fontSize = 24 } = options;
+  const loadedFontName = await loadFont(fontUrl, fontName);
 
   const canvas = document.createElement('canvas');
   const ctx = canvas.getContext('2d')!;
 
-  ctx.font = `${fontSize}px ${fontName}`;
+  ctx.font = `${fontSize}px ${loadedFontName}`;
 
   // Measure baseline metrics once
-  const metrics = ctx.measureText('Hg');
+  const metrics = ctx.measureText(chars);
   const ascent = Math.ceil(metrics.actualBoundingBoxAscent);
   const descent = Math.ceil(metrics.actualBoundingBoxDescent);
 
@@ -113,10 +114,10 @@ async function convertFont(fontUrl: string, options: ConvertFontOptions = {}): P
   const glyphs: Record<string, Glyph> = {};
 
   for (const char of chars) {
-    drawGlyph(ctx, canvas, char, fontName, fontSize, height, ascent);
+    drawGlyph(ctx, canvas, char, loadedFontName, fontSize, height, ascent);
 
-    const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
-    const bounds = getGlyphBounds(img, canvas.width, canvas.height);
+    const img = ctx.getImageData(0, 0, canvas.width, height);
+    const bounds = getGlyphBounds(img, canvas.width, height);
 
     if (!bounds) {
       glyphs[char] = { offset: 0, pixels: [[0]] };
@@ -124,15 +125,14 @@ async function convertFont(fontUrl: string, options: ConvertFontOptions = {}): P
     }
 
     glyphs[char] = {
-      // baseline alignment offset (important for renderer)
-      offset: ascent,
-      pixels: buildGlyphPixels(img, canvas.width, canvas.height, bounds),
+      offset: 0,
+      pixels: buildGlyphPixels(img, canvas.width, height, bounds),
     };
   }
 
   return {
     name: fontName,
-    lineHeight: ascent + descent,
+    lineHeight: height,
     description: 'Generated from TTF via canvas (baseline aligned)',
     isFixedWidth: false,
     glyphs,
