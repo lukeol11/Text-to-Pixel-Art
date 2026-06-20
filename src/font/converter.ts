@@ -12,6 +12,9 @@ type GlyphBounds = {
 
 async function loadFont(fontUrl: string, name = 'custom-font') {
   const res = await fetch(fontUrl);
+  if (!res.ok) {
+    throw new Error(`Failed to load font from ${fontUrl}`);
+  }
   const buffer = await res.arrayBuffer();
 
   const blob = new Blob([buffer], { type: 'font/ttf' });
@@ -75,7 +78,10 @@ function drawGlyph(
   height: number,
   ascent: number,
 ) {
-  canvas.width = 64;
+  // Estimate width for this glyph to avoid clipping.
+  ctx.font = `${fontSize}px ${fontName}`;
+  const glyphWidth = Math.max(1, Math.ceil(ctx.measureText(char).width) + 2);
+  canvas.width = glyphWidth;
   canvas.height = height;
 
   ctx.clearRect(0, 0, canvas.width, canvas.height);

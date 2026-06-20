@@ -1,43 +1,47 @@
 <script setup lang="ts">
 import { ref, watch, watchEffect } from 'vue';
-import { renderPixels, type Font } from 'js-pixel-fonts';
+import { fonts, renderPixels, type Font } from 'js-pixel-fonts';
 import convertFont from './font/converter';
-import fontUrl from './assets/fonts/BlackOpsOne-Regular.ttf?url';
 
 // reactive state
 const text = ref('Hello there!');
 const fontSize = ref<number | null>(24);
 const pixels = ref<ReturnType<typeof renderPixels> | null>(null);
-const activeFontUrl = ref(fontUrl);
+const activeFontUrl = ref();
 const chars = ref<Set<string>>(new Set('ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!?., '));
-
-// font handling
 const font = ref<Font | null>(null);
-
+let convertRequestId = 0;
+let lastConvertedKey = '';
 watch(
   [activeFontUrl, fontSize, text],
-  async ([nextFontUrl, nextFontSize]) => {
-    if (nextFontSize === null || nextFontSize <= 0) {
-      return;
-    }
-    for (const char of text.value) {
+  async ([nextFontUrl, nextFontSize, nextText]) => {
+    if (nextFontSize === null || nextFontSize <= 0 || !activeFontUrl.value) return;
+    for (const char of nextText) {
       chars.value.add(char);
     }
-    font.value = await convertFont(nextFontUrl, {
+    const charsString = Array.from(chars.value).join('');
+    const key = `${nextFontUrl}|${nextFontSize}|${charsString}`;
+
+    if (key === lastConvertedKey) return;
+    const requestId = ++convertRequestId;
+    const nextFont = await convertFont(nextFontUrl, {
       fontSize: nextFontSize,
-      chars: Array.from(chars.value).join(''),
+      chars: charsString,
     });
+
+    if (requestId !== convertRequestId) return;
+    lastConvertedKey = key;
+    font.value = nextFont;
   },
   { immediate: true },
 );
 
-// recompute pixels whenever text or font changes
 watchEffect(() => {
-  if (!font.value) return;
-  pixels.value = renderPixels(text.value, font.value);
+  pixels.value = renderPixels(text.value, font.value ?? fonts.sevenPlus);
 });
 
-// handle font upload
+let uploadedFontObjectUrl: string | null = null;
+
 async function handleFontUpload(options: { file?: { file: File } }) {
   const rawFile = options.file?.file as File | undefined;
 
@@ -46,23 +50,24 @@ async function handleFontUpload(options: { file?: { file: File } }) {
     return;
   }
 
-  activeFontUrl.value = URL.createObjectURL(rawFile);
+  if (uploadedFontObjectUrl) {
+    URL.revokeObjectURL(uploadedFontObjectUrl);
+  }
+  uploadedFontObjectUrl = URL.createObjectURL(rawFile);
+  activeFontUrl.value = uploadedFontObjectUrl;
 }
 </script>
 
 <template>
   <div class="space-y-4">
-    <!-- TEXT INPUT -->
     <n-input v-model:value="text" type="text" placeholder="Enter pixel text" />
 
-    <n-input-number v-model:value="fontSize" clearable placeholder="Font size" />
+    <n-input-number v-if="font" v-model:value="fontSize" clearable placeholder="Font size" />
 
-    <!-- FONT UPLOAD -->
     <n-upload :show-file-list="false" :custom-request="handleFontUpload" accept=".ttf">
       <n-button>Upload Font</n-button>
     </n-upload>
 
-    <!-- PIXEL OUTPUT -->
     <div v-if="pixels" class="inline-block">
       <div v-for="(row, y) in pixels" :key="y" class="flex">
         <div
